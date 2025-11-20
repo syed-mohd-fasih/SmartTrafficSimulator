@@ -25,7 +25,7 @@ static float distf(const Vec2f &a, const Vec2f &b)
 }
 
 // -----------------------------
-// DynArr: minimal dynamic array (safe - uses new/delete)
+// DynArr: minimal dynamic array
 // -----------------------------
 template <typename T>
 struct DynArr
