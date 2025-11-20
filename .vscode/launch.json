@@ -10,7 +10,7 @@
 			"MIMode": "gdb",
 			"miDebuggerPath": "C:/raylib/w64devkit/bin/gdb.exe",
 			"externalConsole": true,
-			"preLaunchTask": "build"
+			"preLaunchTask": "build SmartTraffic"
 		}
 	]
 }
