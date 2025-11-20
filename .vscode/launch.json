@@ -1,0 +1,16 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Run SmartTraffic",
+			"type": "cppdbg",
+			"request": "launch",
+			"program": "${workspaceFolder}/SmartTraffic.exe",
+			"cwd": "${workspaceFolder}",
+			"MIMode": "gdb",
+			"miDebuggerPath": "C:/raylib/w64devkit/bin/gdb.exe",
+			"externalConsole": true,
+			"preLaunchTask": "build"
+		}
+	]
+}
