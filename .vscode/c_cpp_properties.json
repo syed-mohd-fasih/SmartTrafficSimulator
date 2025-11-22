@@ -5,7 +5,7 @@
 			"name": "Win32",
 			"includePath": ["${workspaceFolder}/**", "C:/raylib/raylib/src", "C:/raylib/raylib/src/external"],
 			"defines": ["_DEBUG", "UNICODE", "_UNICODE"],
-			"compilerPath": "C:/raylib/w64devkit/bin/gcc.exe",
+			"compilerPath": "C:/raylib/w64devkit/bin/g++.exe",
 			"cStandard": "c11",
 			"cppStandard": "c++17",
 			"intelliSenseMode": "windows-gcc-x64"
