@@ -1,12 +1,8 @@
 #include "raylib.h"
 
 #include <cmath>
-#include <cstdint>
 #include <cstdio>
-#include <cstdlib>
 #include <ctime>
-#include <climits>
-#include <cstring>
 
 // -----------------------------
 // Utility Vec2f
@@ -541,10 +537,10 @@ Vehicle *spawnVehicle(int src, int dest, VehicleType type)
     if (src < 0 || dest < 0)
         return nullptr;
     // compute path first (Dijkstra)
-    if (!runDijkstra(src, dest))
+    if (!pathFound)
         return nullptr;
 
-    Vehicle v; // default constructed
+    Vehicle v;
     v.id = nextVehicleId++;
     v.type = type;
     v.src = src;
@@ -559,7 +555,7 @@ Vehicle *spawnVehicle(int src, int dest, VehicleType type)
         v.path.push(lastPath[i]);
     v.speed = (type == EMERGENCY) ? 140.0f : 80.0f;
 
-    vehicles.push(v); // deep copy now
+    vehicles.push(v);
     Vehicle *pv = &vehicles[vehicles.size() - 1];
 
     if (type == EMERGENCY)
@@ -655,13 +651,8 @@ void updateVehicles(float dt)
 
         if (v.posAlong <= 0.001f)
         {
-            Vec2f a = G.nodes[curNode].pos;
-            Vec2f b = G.nodes[nextNode].pos;
-            float dx = b.x - a.x;
-            float dy = b.y - a.y;
-            int neededState = (fabsf(dx) > fabsf(dy)) ? 1 : 0;
             Node &n = G.nodes[curNode];
-            bool green = (n.lightState == neededState);
+            bool green = (n.lightState == 0);
 
             // EMERGENCY BYPASS
             if (v.type == EMERGENCY)
@@ -673,11 +664,6 @@ void updateVehicles(float dt)
                 // clear queue at this node
                 while (!n.queue.empty())
                     n.queue.pop();
-
-                // force green for emergency direction
-                n.lightState = neededState;
-
-                // allow movement
             }
             else
             {
