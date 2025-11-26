@@ -17,6 +17,7 @@ struct Vec2f
     Vec2f() : x(0), y(0) {}
     Vec2f(float _x, float _y) : x(_x), y(_y) {}
 };
+
 static float distf(const Vec2f &a, const Vec2f &b)
 {
     float dx = a.x - b.x;
@@ -25,7 +26,7 @@ static float distf(const Vec2f &a, const Vec2f &b)
 }
 
 // -----------------------------
-// DynArr: minimal dynamic array
+// DynArr: minimal dynamic array (with deep copy)
 // -----------------------------
 template <typename T>
 struct DynArr
@@ -33,10 +34,47 @@ struct DynArr
     T *data;
     int count;
     int capacity;
+
     DynArr() : data(nullptr), count(0), capacity(0) {}
+
+    // Deep copy constructor
+    DynArr(const DynArr &other) : data(nullptr), count(0), capacity(0)
+    {
+        if (other.count > 0)
+        {
+            reserve(other.count);
+            count = other.count;
+            for (int i = 0; i < count; ++i)
+                data[i] = other.data[i];
+        }
+    }
+
+    // Deep copy assignment
+    DynArr &operator=(const DynArr &other)
+    {
+        if (this != &other)
+        {
+            delete[] data;
+            data = nullptr;
+            count = 0;
+            capacity = 0;
+
+            if (other.count > 0)
+            {
+                reserve(other.count);
+                count = other.count;
+                for (int i = 0; i < count; ++i)
+                    data[i] = other.data[i];
+            }
+        }
+        return *this;
+    }
+
     ~DynArr() { delete[] data; }
+
     void clear() { count = 0; }
     int size() const { return count; }
+
     void reserve(int newcap)
     {
         if (newcap <= capacity)
@@ -51,67 +89,85 @@ struct DynArr
         data = nd;
         capacity = c;
     }
+
     void push(const T &v)
     {
         if (count + 1 > capacity)
             reserve(count + 1);
         data[count++] = v;
     }
+
     T &operator[](int i) { return data[i]; }
     const T &operator[](int i) const { return data[i]; }
 };
 
 // -----------------------------
-// SimpleQueue: circular queue using DynArr<int>
+// SimpleQueue: circular queue using raw array
 // -----------------------------
 struct SimpleQueueInt
 {
     int *buf;
     int cap;
     int head, tail;
+
     SimpleQueueInt() : buf(nullptr), cap(0), head(0), tail(0) {}
     ~SimpleQueueInt() { delete[] buf; }
+
+    bool empty() const { return head == tail; }
+
     void reserve(int n)
     {
         if (n <= cap)
             return;
+
         int newcap = cap == 0 ? 8 : cap;
         while (newcap < n)
             newcap <<= 1;
+
         int *nb = new int[newcap];
-        // copy existing elements into nb
-        int i = 0;
-        while (!empty())
+
+        // copy existing elements in order (head -> tail)
+        int sz = 0;
+        if (buf != nullptr && cap > 0 && !empty())
         {
-            nb[i++] = pop();
+            int idx = head;
+            while (idx != tail)
+            {
+                nb[sz++] = buf[idx];
+                idx = (idx + 1) % cap; // ✅ FIXED: step by 1, not +cap
+            }
         }
+
         delete[] buf;
         buf = nb;
         cap = newcap;
         head = 0;
-        tail = i;
+        tail = sz;
     }
-    bool empty() const { return head == tail; }
+
     void push(int v)
     {
         if (cap == 0)
             reserve(8);
+
         int next = (tail + 1) % cap;
         if (next == head)
         {
-            // expand
+            // expand, but keep existing elements
             reserve(cap * 2);
             next = (tail + 1) % cap;
         }
         buf[tail] = v;
         tail = next;
     }
+
     int pop()
     {
         int v = buf[head];
         head = (head + 1) % cap;
         return v;
     }
+
     // peek front (undefined if empty)
     int front() const { return buf[head]; }
 };
@@ -190,136 +246,6 @@ struct MinHeap
 };
 
 // -----------------------------
-// Simple HashMap (int->void*) open addressing
-// -----------------------------
-struct IntPtrMap
-{
-    int *keys;
-    void **vals;
-    int cap;
-    int used;
-    IntPtrMap() : keys(nullptr), vals(nullptr), cap(0), used(0) {}
-    ~IntPtrMap()
-    {
-        delete[] keys;
-        delete[] vals;
-    }
-    void reserve(int n)
-    {
-        if (cap >= n)
-            return;
-        int c = cap == 0 ? 8 : cap;
-        while (c < n)
-            c <<= 1;
-        int *nk = new int[c];
-        void **nv = new void *[c];
-        for (int i = 0; i < c; i++)
-        {
-            nk[i] = INT_MIN;
-            nv[i] = nullptr;
-        }
-        // rehash old entries
-        if (cap > 0)
-        {
-            for (int i = 0; i < cap; i++)
-            {
-                if (keys[i] != INT_MIN)
-                {
-                    int k = keys[i];
-                    void *v = vals[i];
-                    unsigned idx = ((unsigned)k * 2654435761u) & (c - 1);
-                    while (nk[idx] != INT_MIN)
-                        idx = (idx + 1) & (c - 1);
-                    nk[idx] = k;
-                    nv[idx] = v;
-                }
-            }
-            delete[] keys;
-            delete[] vals;
-        }
-        keys = nk;
-        vals = nv;
-        cap = c;
-        // recount used
-        used = 0;
-        for (int i = 0; i < cap; i++)
-            if (keys[i] != INT_MIN)
-                used++;
-    }
-    void put(int key, void *v)
-    {
-        if (cap == 0)
-            reserve(8);
-        if (used * 2 >= cap)
-            reserve(cap * 2);
-        unsigned idx = ((unsigned)key * 2654435761u) & (cap - 1);
-        while (keys[idx] != INT_MIN && keys[idx] != key)
-            idx = (idx + 1) & (cap - 1);
-        if (keys[idx] == INT_MIN)
-            used++;
-        keys[idx] = key;
-        vals[idx] = v;
-    }
-    void *get(int key)
-    {
-        if (cap == 0)
-            return nullptr;
-        unsigned idx = ((unsigned)key * 2654435761u) & (cap - 1);
-        unsigned start = idx;
-        while (keys[idx] != INT_MIN)
-        {
-            if (keys[idx] == key)
-                return vals[idx];
-            idx = (idx + 1) & (cap - 1);
-            if (idx == start)
-                break;
-        }
-        return nullptr;
-    }
-    void remove(int key)
-    {
-        if (cap == 0)
-            return;
-        unsigned idx = ((unsigned)key * 2654435761u) & (cap - 1);
-        unsigned start = idx;
-        while (keys[idx] != INT_MIN)
-        {
-            if (keys[idx] == key)
-            {
-                keys[idx] = INT_MIN;
-                vals[idx] = nullptr;
-                used--;
-                // rehash cluster
-                idx = (idx + 1) & (cap - 1);
-                while (keys[idx] != INT_MIN)
-                {
-                    int k = keys[idx];
-                    void *v = vals[idx];
-                    keys[idx] = INT_MIN;
-                    vals[idx] = nullptr;
-                    used--;
-                    put(k, v);
-                    idx = (idx + 1) & (cap - 1);
-                }
-                return;
-            }
-            idx = (idx + 1) & (cap - 1);
-            if (idx == start)
-                break;
-        }
-    }
-    void clear()
-    {
-        delete[] keys;
-        delete[] vals;
-        keys = nullptr;
-        vals = nullptr;
-        cap = 0;
-        used = 0;
-    }
-};
-
-// -----------------------------
 // Graph structures
 // -----------------------------
 struct Edge
@@ -385,6 +311,7 @@ enum VehicleType
     NORMAL = 0,
     EMERGENCY = 1
 };
+
 struct Vehicle
 {
     int id;
@@ -395,7 +322,15 @@ struct Vehicle
     float posAlong;
     float speed;
     bool finished;
-    Vehicle() : id(-1), type(NORMAL), src(-1), dest(-1), currentSegment(0), posAlong(0), speed(80.0f), finished(false) {}
+
+    // queue-related state (to avoid multiple pushes)
+    bool waiting;
+    int waitingNode;
+
+    Vehicle()
+        : id(-1), type(NORMAL), src(-1), dest(-1),
+          currentSegment(0), posAlong(0), speed(80.0f),
+          finished(false), waiting(false), waitingNode(-1) {}
 };
 
 // -----------------------------
@@ -403,8 +338,7 @@ struct Vehicle
 // -----------------------------
 static Graph G;
 static DynArr<Vehicle> vehicles;
-static IntPtrMap vehicleMap;  // id -> Vehicle*
-static MinHeap emergencyHeap; // store emergency vehicle ids
+static MinHeap emergencyHeap; // store emergency vehicle ids (not heavily used)
 static int nextVehicleId = 1;
 static int selectedStart = -1, selectedEnd = -1;
 static bool showIds = true;
@@ -437,6 +371,7 @@ void buildGridGraph(int cols, int rows, float marginX, float marginY, float gx, 
     }
     auto idx = [&](int c, int r)
     { return r * cols + c; };
+
     for (int r = 0; r < rows; r++)
     {
         for (int c = 0; c < cols; c++)
@@ -483,7 +418,7 @@ void ensureArrSize(int n)
     else
     {
         for (int i = 0; i < n; i++)
-            const_cast<float &>(g_scores[i]) = INFINITY;
+            g_scores[i] = INFINITY;
     }
     if (cameFrom.size() < n)
     {
@@ -494,7 +429,7 @@ void ensureArrSize(int n)
     else
     {
         for (int i = 0; i < n; i++)
-            const_cast<int &>(cameFrom[i]) = -1;
+            cameFrom[i] = -1;
     }
 }
 
@@ -608,7 +543,8 @@ Vehicle *spawnVehicle(int src, int dest, VehicleType type)
     // compute path first (Dijkstra)
     if (!runDijkstra(src, dest))
         return nullptr;
-    Vehicle v;
+
+    Vehicle v; // default constructed
     v.id = nextVehicleId++;
     v.type = type;
     v.src = src;
@@ -616,22 +552,25 @@ Vehicle *spawnVehicle(int src, int dest, VehicleType type)
     v.currentSegment = 0;
     v.posAlong = 0.0f;
     v.finished = false;
+    v.waiting = false;
+    v.waitingNode = -1;
     v.path.clear();
     for (int i = 0; i < lastPath.size(); ++i)
         v.path.push(lastPath[i]);
     v.speed = (type == EMERGENCY) ? 140.0f : 80.0f;
-    vehicles.push(v);
+
+    vehicles.push(v); // deep copy now
     Vehicle *pv = &vehicles[vehicles.size() - 1];
-    vehicleMap.put(pv->id, (void *)pv);
+
     if (type == EMERGENCY)
         emergencyHeap.push(pv->id, 0.0f);
+
     return pv;
 }
 
 void resetVehicles()
 {
     vehicles.clear();
-    vehicleMap.clear();
     emergencyHeap.clear();
     nextVehicleId = 1;
 }
@@ -648,18 +587,30 @@ void updateTrafficLights(float dt)
         if (n.lightTimer >= lightCycle)
             n.lightTimer -= lightCycle;
         n.lightState = (n.lightTimer < (lightCycle * 0.5f)) ? 0 : 1;
+
         // emergency override: if any emergency in queue, force state 0 briefly
         if (n.queue.cap > 0 && !n.queue.empty())
         {
-            // scan queue for emergency vehicle
             int head = n.queue.head;
             int tail = n.queue.tail;
             int idx = head;
             bool found = false;
+
             while (idx != tail)
             {
                 int vid = n.queue.buf[idx];
-                Vehicle *pv = (Vehicle *)vehicleMap.get(vid);
+
+                // LINEAR SEARCH for vehicle
+                Vehicle *pv = nullptr;
+                for (int k = 0; k < vehicles.size(); ++k)
+                {
+                    if (vehicles[k].id == vid)
+                    {
+                        pv = &vehicles[k];
+                        break;
+                    }
+                }
+
                 if (pv && pv->type == EMERGENCY)
                 {
                     found = true;
@@ -685,8 +636,23 @@ void updateVehicles(float dt)
             v.finished = true;
             continue;
         }
+
+        // safety: bounds check on segment index
+        if (v.currentSegment >= v.path.size() - 1)
+        {
+            v.finished = true;
+            continue;
+        }
+
         int curNode = v.path[v.currentSegment];
         int nextNode = v.path[v.currentSegment + 1];
+
+        if (curNode < 0 || curNode >= G.size() || nextNode < 0 || nextNode >= G.size())
+        {
+            v.finished = true;
+            continue;
+        }
+
         if (v.posAlong <= 0.001f)
         {
             Vec2f a = G.nodes[curNode].pos;
@@ -696,13 +662,44 @@ void updateVehicles(float dt)
             int neededState = (fabsf(dx) > fabsf(dy)) ? 1 : 0;
             Node &n = G.nodes[curNode];
             bool green = (n.lightState == neededState);
-            if (!green)
+
+            // EMERGENCY BYPASS
+            if (v.type == EMERGENCY)
             {
-                // queue up
-                n.queue.push(v.id);
-                continue;
+                // skip lights and queue
+                v.waiting = false;
+                v.waitingNode = -1;
+
+                // clear queue at this node
+                while (!n.queue.empty())
+                    n.queue.pop();
+
+                // force green for emergency direction
+                n.lightState = neededState;
+
+                // allow movement
             }
             else
+            {
+                // NORMAL logic
+                if (!green)
+                {
+                    n.queue.push(v.id);
+                    v.waiting = true;
+                    v.waitingNode = curNode;
+                    continue;
+                }
+
+                if (!n.queue.empty())
+                {
+                    int front = n.queue.front();
+                    if (front != v.id)
+                        continue;
+                    n.queue.pop();
+                    v.waiting = false;
+                }
+            }
+
             {
                 bool allowed = true;
                 if (!n.queue.empty())
@@ -711,12 +708,17 @@ void updateVehicles(float dt)
                     if (front != v.id)
                         allowed = false;
                     else
+                    {
                         n.queue.pop();
+                        v.waiting = false;
+                        v.waitingNode = -1;
+                    }
                 }
                 if (!allowed)
                     continue;
             }
         }
+
         Vec2f pcur = G.nodes[curNode].pos;
         Vec2f pnext = G.nodes[nextNode].pos;
         float segLen = distf(pcur, pnext);
@@ -803,9 +805,10 @@ void drawVehicles()
             continue;
         if (v.path.size() < 2)
             continue;
-        int s = v.currentSegment;
-        if (s >= v.path.size() - 1)
+        if (v.currentSegment >= v.path.size() - 1)
             continue;
+
+        int s = v.currentSegment;
         Vec2f a = G.nodes[v.path[s]].pos;
         Vec2f b = G.nodes[v.path[s + 1]].pos;
         float t = v.posAlong;
@@ -828,7 +831,8 @@ void drawUI()
     DrawText("D = Dijkstra    A = A*    V = spawn vehicle    E = spawn emergency", 12, screenH - 74, 12, RAYWHITE);
     DrawText("S = Start/Stop sim    R = Reset vehicles    G = toggle node ids", 12, screenH - 58, 12, RAYWHITE);
     char buf[256];
-    sprintf(buf, "Start: %d   End: %d   Path found: %s   Algorithm: %s   Vehicles: %d", selectedStart, selectedEnd, pathFound ? "YES" : "NO", useAstar ? "A*" : "Dijkstra", vehicles.size());
+    sprintf(buf, "Start: %d   End: %d   Path found: %s   Algorithm: %s   Vehicles: %d",
+            selectedStart, selectedEnd, pathFound ? "YES" : "NO", useAstar ? "A*" : "Dijkstra", vehicles.size());
     DrawText(buf, 12, screenH - 40, 12, RAYWHITE);
 
     DrawText("Legend:", screenW - 220, screenH - 110, 12, RAYWHITE);
@@ -865,8 +869,6 @@ int main()
     ensureArrSize(G.size());
 
     vehicles.clear();
-    vehicleMap.clear();
-    vehicleMap.reserve(64);
 
     double prev = GetTime();
     while (!WindowShouldClose())
