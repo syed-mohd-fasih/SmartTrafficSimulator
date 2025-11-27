@@ -343,7 +343,7 @@ static bool pathFound = false;
 static DynArr<int> lastPath;
 static bool useAstar = false;
 static float lightCycle = 6.0f;
-static int screenW = 1000, screenH = 700;
+static int screenW = 1280, screenH = 720;
 
 // -----------------------------
 // Build simple grid graph
@@ -753,7 +753,7 @@ void drawNode(int i)
     {
         char buf[32];
         sprintf(buf, "%d", n.id);
-        DrawText(buf, (int)n.pos.x + 18, (int)n.pos.y - 8, 10, DARKGRAY);
+        DrawText(buf, (int)n.pos.x + 18, (int)n.pos.y - 8, 10, RAYWHITE);
     }
 }
 
@@ -805,34 +805,49 @@ void drawVehicles()
         DrawCircleLines((int)x, (int)y, 6, BLACK);
         char buf[32];
         sprintf(buf, "%d", v.id);
-        DrawText(buf, (int)x + 8, (int)y - 8, 10, BLACK);
+        DrawText(buf, (int)x + 8, (int)y - 8, 10, RAYWHITE);
     }
 }
 
 void drawUI()
 {
     DrawRectangle(0, screenH - 120, screenW, 120, (Color){20, 20, 20, 200});
-    DrawText("SmartTraffic - Demo", 12, screenH - 110, 18, RAYWHITE);
-    DrawText("Left-click nodes to set Start then End", 12, screenH - 90, 12, RAYWHITE);
-    DrawText("D = Dijkstra    A = A*    V = spawn vehicle    E = spawn emergency", 12, screenH - 74, 12, RAYWHITE);
-    DrawText("S = Start/Stop sim    R = Reset vehicles    G = toggle node ids", 12, screenH - 58, 12, RAYWHITE);
+    DrawText("SmartTraffic - Keyboard Shortcuts:", 12, screenH - 110, 26, RAYWHITE);
+    DrawText("Left-click nodes to set Start then End", 12, screenH - 83, 18, RAYWHITE);
+
+    DrawText("D = ", 12, screenH - 64, 18, BLUE);
+    DrawText("Dijkstra", 45, screenH - 64, 18, RAYWHITE);
+    DrawText("    A = ", 12 + 100, screenH - 64, 18, GREEN);
+    DrawText("A*", 12 + 155, screenH - 64, 18, RAYWHITE);
+    DrawText("    V = ", 12 + 180, screenH - 64, 18, BLUE);
+    DrawText("spawn vehicle", 12 + 245, screenH - 64, 18, RAYWHITE);
+    DrawText("    E = ", 12 + 370, screenH - 64, 18, ORANGE);
+    DrawText("spawn emergency", 12 + 435, screenH - 64, 18, RAYWHITE);
+
+    DrawText("S = ", 12, screenH - 45, 18, GREEN);
+    DrawText("Start/Stop sim", 45, screenH - 45, 18, RAYWHITE);
+    DrawText("    R = ", 12 + 150, screenH - 45, 18, RED);
+    DrawText("Reset vehicles", 12 + 205, screenH - 45, 18, RAYWHITE);
+    DrawText("    G = ", 12 + 330, screenH - 45, 18, YELLOW);
+    DrawText("toggle node ids", 12 + 385, screenH - 45, 18, RAYWHITE);
+
     char buf[256];
     sprintf(buf, "Start: %d   End: %d   Path found: %s   Algorithm: %s   Vehicles: %d",
             selectedStart, selectedEnd, pathFound ? "YES" : "NO", useAstar ? "A*" : "Dijkstra", vehicles.size());
-    DrawText(buf, 12, screenH - 40, 12, RAYWHITE);
+    DrawText(buf, 12, screenH - 25, 18, RAYWHITE);
 
-    DrawText("Legend:", screenW - 220, screenH - 110, 12, RAYWHITE);
-    DrawRectangle(screenW - 240, screenH - 100, 200, 82, (Color){40, 40, 40, 180});
-    DrawText("Node (light):", screenW - 230, screenH - 92, 10, RAYWHITE);
-    DrawCircle(screenW - 210, screenH - 78, 6, LIGHTGRAY);
-    DrawText("Edge:", screenW - 230, screenH - 66, 10, RAYWHITE);
-    DrawLine(screenW - 210, screenH - 56, screenW - 190, screenH - 56, LIGHTGRAY);
-    DrawText("Path:", screenW - 230, screenH - 46, 10, RAYWHITE);
-    DrawRectangle(screenW - 210, screenH - 36, 20, 6, (Color){100, 180, 255, 180});
-    DrawText("Normal Vehicle:", screenW - 230, screenH - 26, 10, RAYWHITE);
-    DrawCircle(screenW - 160, screenH - 20, 6, DARKBLUE);
-    DrawText("Emergency Vehicle:", screenW - 230, screenH - 10, 10, RAYWHITE);
-    DrawCircle(screenW - 120, screenH - 6, 6, ORANGE);
+    DrawText("Legend:", screenW - 350, screenH - 110, 20, RAYWHITE);
+    DrawRectangle(screenW - 270, screenH - 110, 260, 100, (Color){40, 40, 40, 180});
+    DrawText("Node:", screenW - 260, screenH - 105, 14, RAYWHITE);
+    DrawCircle(screenW - 105, screenH - 97, 6, LIGHTGRAY);
+    DrawText("Edge:", screenW - 260, screenH - 85, 14, RAYWHITE);
+    DrawLine(screenW - 120, screenH - 77, screenW - 90, screenH - 77, LIGHTGRAY);
+    DrawText("Path:", screenW - 260, screenH - 65, 14, RAYWHITE);
+    DrawRectangle(screenW - 120, screenH - 60, 30, 6, (Color){100, 180, 255, 180});
+    DrawText("Normal Vehicle:", screenW - 260, screenH - 45, 14, RAYWHITE);
+    DrawCircle(screenW - 105, screenH - 40, 6, DARKBLUE);
+    DrawText("Emergency Vehicle:", screenW - 260, screenH - 25, 14, RAYWHITE);
+    DrawCircle(screenW - 105, screenH - 20, 6, ORANGE);
 }
 
 // -----------------------------
@@ -840,8 +855,11 @@ void drawUI()
 // -----------------------------
 int main()
 {
+    Image icon = LoadImage("./assets/icon.png");
     srand((unsigned)time(NULL));
     InitWindow(screenW, screenH, "SmartTraffic - Data Structures Project Demo");
+    SetWindowIcon(icon);
+    UnloadImage(icon);
     SetTargetFPS(60);
 
     int cols = 12, rows = 8;
@@ -967,6 +985,5 @@ int main()
         EndDrawing();
     }
 
-    CloseWindow();
     return 0;
 }
