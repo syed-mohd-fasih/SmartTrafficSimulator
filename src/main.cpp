@@ -348,7 +348,9 @@ struct NPCVehicle
     int nextNode;
     float posAlong;
     float speed;
-    NPCVehicle() : id(-1), currentNode(0), nextNode(0), posAlong(0.0f), speed(40.0f) {}
+    bool waiting;
+    int waitingNode;
+    NPCVehicle() : id(-1), currentNode(0), nextNode(0), posAlong(0.0f), speed(40.0f), waiting(false), waitingNode(-1) {}
 };
 
 // -----------------------------
@@ -594,8 +596,22 @@ Vehicle *spawnVehicle(int src, int dest, VehicleType type)
 void resetVehicles()
 {
     vehicles.clear();
+    npcVehicles.clear();
     emergencyHeap.clear();
+    lastPath.clear();
     nextVehicleId = 1;
+    selectedStart = -1, selectedEnd = -1;
+    runningSim = false;
+    pathFound = false;
+    useAstar = false;
+    nextNPCId = 100000;
+
+    for (int i = 0; i < G.size(); i++)
+    {
+        Node &n = G.nodes[i];
+        while (!n.queue.empty())
+            n.queue.pop();
+    }
 }
 
 // -----------------------------
@@ -619,6 +635,8 @@ void spawnNPCs(int count = 1)
             n.nextNode = n.currentNode;
         n.posAlong = 0.0f;
         n.speed = (float)GetRandomValue(30, 60); // px/sec, slower than user cars
+        n.waiting = false;
+        n.waitingNode = -1;
         npcVehicles.push(n);
     }
 }
@@ -640,44 +658,14 @@ void updateTrafficLights(float dt)
     for (int i = 0; i < G.size(); ++i)
     {
         Node &n = G.nodes[i];
+
+        // Update light timer and state
         n.lightTimer += dt;
         if (n.lightTimer >= lightCycle)
             n.lightTimer -= lightCycle;
+
+        // 0 = Green (first half of cycle), 1 = Red (second half)
         n.lightState = (n.lightTimer < (lightCycle * 0.5f)) ? 0 : 1;
-
-        // emergency override: if any emergency in queue, force state 0 briefly
-        if (n.queue.cap > 0 && !n.queue.empty())
-        {
-            int head = n.queue.head;
-            int tail = n.queue.tail;
-            int idx = head;
-            bool found = false;
-
-            while (idx != tail)
-            {
-                int vid = n.queue.buf[idx];
-
-                // LINEAR SEARCH for vehicle
-                Vehicle *pv = nullptr;
-                for (int k = 0; k < vehicles.size(); ++k)
-                {
-                    if (vehicles[k].id == vid)
-                    {
-                        pv = &vehicles[k];
-                        break;
-                    }
-                }
-
-                if (pv && pv->type == EMERGENCY)
-                {
-                    found = true;
-                    break;
-                }
-                idx = (idx + 1) % n.queue.cap;
-            }
-            if (found)
-                n.lightState = 0;
-        }
     }
 }
 
@@ -688,14 +676,7 @@ void updateVehicles(float dt)
         Vehicle &v = vehicles[i];
         if (v.finished)
             continue;
-        if (v.path.size() < 2)
-        {
-            v.finished = true;
-            continue;
-        }
-
-        // safety: bounds check on segment index
-        if (v.currentSegment >= v.path.size() - 1)
+        if (v.path.size() < 2 || v.currentSegment >= v.path.size() - 1)
         {
             v.finished = true;
             continue;
@@ -703,63 +684,59 @@ void updateVehicles(float dt)
 
         int curNode = v.path[v.currentSegment];
         int nextNode = v.path[v.currentSegment + 1];
-
         if (curNode < 0 || curNode >= G.size() || nextNode < 0 || nextNode >= G.size())
         {
             v.finished = true;
             continue;
         }
 
+        Node &n = G.nodes[curNode];
+        bool green = (n.lightState == 0);
+
+        // Handle arrival at intersection (or if already waiting)
         if (v.posAlong <= 0.001f)
         {
-            Node &n = G.nodes[curNode];
-            bool green = (n.lightState == 0);
-
-            // EMERGENCY BYPASS
             if (v.type == EMERGENCY)
             {
-                // skip lights and queue
+                // Emergency vehicles ignore lights and queues (traffic laws)
                 v.waiting = false;
                 v.waitingNode = -1;
-
-                // clear queue at this node
-                while (!n.queue.empty())
-                    n.queue.pop();
-
-                // ensure green for emergency direction
-                n.lightState = 0;
+                // Note: Emergency vehicle moves immediately, effectively clearing the path.
             }
-            else
+            else // NORMAL vehicle logic
             {
-                // NORMAL logic
-                if (!green)
+                // Condition to proceed: Green Light AND (Queue is empty OR Vehicle is at the front)
+                bool canProceed = green && (n.queue.empty() || n.queue.front() == v.id);
+
+                if (canProceed)
                 {
-                    // push only once
+                    // If the vehicle was in the queue (i.e., v.waiting is true AND v.id is the front),
+                    // remove it from the queue as it proceeds.
+                    if (v.waiting && !n.queue.empty() && n.queue.front() == v.id)
+                    {
+                        n.queue.pop();
+                    }
+
+                    // Reset waiting state and allow movement (fall through to segment movement)
+                    v.waiting = false;
+                    v.waitingNode = -1;
+                }
+                else // Must wait (Red light OR stuck behind another car)
+                {
                     if (!v.waiting)
                     {
+                        // First time arriving at a red light/busy intersection, join queue
                         n.queue.push(v.id);
                         v.waiting = true;
                         v.waitingNode = curNode;
                     }
+                    // Continue to next vehicle
                     continue;
                 }
-
-                // GREEN LIGHT: if queue exists, only proceed if front == v.id
-                if (!n.queue.empty())
-                {
-                    int front = n.queue.front();
-                    if (front != v.id)
-                        continue; // not your turn yet
-                    // it's your turn: pop exactly once
-                    n.queue.pop();
-                }
-
-                // mark as not waiting
-                v.waiting = false;
-                v.waitingNode = -1;
             }
         }
 
+        // Move along segment
         Vec2f pcur = G.nodes[curNode].pos;
         Vec2f pnext = G.nodes[nextNode].pos;
         float segLen = distf(pcur, pnext);
@@ -770,10 +747,10 @@ void updateVehicles(float dt)
             if (v.currentSegment >= v.path.size() - 1)
             {
                 v.finished = true;
-                continue;
             }
             continue;
         }
+
         float delta = (v.speed * dt) / segLen;
         v.posAlong += delta;
         if (v.posAlong >= 1.0f)
@@ -783,15 +760,11 @@ void updateVehicles(float dt)
             if (v.currentSegment >= v.path.size() - 1)
             {
                 v.finished = true;
-                continue;
             }
         }
     }
 }
 
-// -----------------------------
-// NPC update (independent system)
-// -----------------------------
 void updateNPCs(float dt)
 {
     for (int i = 0; i < npcVehicles.size(); ++i)
@@ -804,25 +777,41 @@ void updateNPCs(float dt)
 
         Node &curNodeObj = G.nodes[n.currentNode];
 
-        // Handle traffic light and queue at the current node
         if (n.posAlong <= 0.001f)
         {
             bool green = (curNodeObj.lightState == 0);
 
-            // NPC must wait if light is red or other vehicles are ahead in queue
-            if (!green || (!curNodeObj.queue.empty() && curNodeObj.queue.front() != n.id))
-            {
-                if (curNodeObj.queue.cap > 0)
-                    curNodeObj.queue.push(n.id);
-                continue;
-            }
+            // NPC proceed condition: Green AND (Queue is empty OR NPC is at the front)
+            bool canProceed = green && (curNodeObj.queue.empty() || curNodeObj.queue.front() == n.id);
 
-            // If NPC is at the front of the queue or light is green, remove from queue
-            if (!curNodeObj.queue.empty() && curNodeObj.queue.front() == n.id)
-                curNodeObj.queue.pop();
+            if (canProceed)
+            {
+                // If it was waiting and is now moving, pop itself and reset state
+                if (n.waiting && !curNodeObj.queue.empty() && curNodeObj.queue.front() == n.id)
+                {
+                    curNodeObj.queue.pop();
+                }
+                n.waiting = false; // Reset waiting state
+                n.waitingNode = -1;
+                // Allow movement: continue to the movement logic below
+            }
+            else // Must wait: Red OR not at the front of the queue
+            {
+                if (!n.waiting) // ONLY PUSH IF NOT ALREADY WAITING
+                {
+                    if (curNodeObj.queue.cap > 0)
+                    {
+                        curNodeObj.queue.push(n.id);
+                        n.waiting = true;
+                        n.waitingNode = n.currentNode;
+                    }
+                }
+
+                continue; // Stop movement and wait
+            }
         }
 
-        // Move along the edge
+        // Move along edge (unchanged)
         Vec2f a = G.nodes[n.currentNode].pos;
         Vec2f b = G.nodes[n.nextNode].pos;
         float segLen = distf(a, b);
@@ -831,25 +820,18 @@ void updateNPCs(float dt)
             n.currentNode = n.nextNode;
             n.posAlong = 0.0f;
             DynArr<Edge> &nb = G.adj[n.currentNode];
-            if (nb.size() > 0)
-                n.nextNode = nb[GetRandomValue(0, nb.size() - 1)].to;
-            else
-                n.nextNode = n.currentNode;
+            n.nextNode = (nb.size() > 0) ? nb[GetRandomValue(0, nb.size() - 1)].to : n.currentNode;
             continue;
         }
 
         float delta = (n.speed * dt) / segLen;
         n.posAlong += delta;
-
         if (n.posAlong >= 1.0f)
         {
             n.currentNode = n.nextNode;
             n.posAlong = 0.0f;
             DynArr<Edge> &nb = G.adj[n.currentNode];
-            if (nb.size() > 0)
-                n.nextNode = nb[GetRandomValue(0, nb.size() - 1)].to;
-            else
-                n.nextNode = n.currentNode;
+            n.nextNode = (nb.size() > 0) ? nb[GetRandomValue(0, nb.size() - 1)].to : n.currentNode;
         }
     }
 }
