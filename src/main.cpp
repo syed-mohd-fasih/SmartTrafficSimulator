@@ -797,49 +797,59 @@ void updateNPCs(float dt)
     for (int i = 0; i < npcVehicles.size(); ++i)
     {
         NPCVehicle &n = npcVehicles[i];
-
         if (n.currentNode < 0 || n.currentNode >= G.size())
             continue;
         if (n.nextNode < 0 || n.nextNode >= G.size())
             continue;
 
+        Node &curNodeObj = G.nodes[n.currentNode];
+
+        // Handle traffic light and queue at the current node
+        if (n.posAlong <= 0.001f)
+        {
+            bool green = (curNodeObj.lightState == 0);
+
+            // NPC must wait if light is red or other vehicles are ahead in queue
+            if (!green || (!curNodeObj.queue.empty() && curNodeObj.queue.front() != n.id))
+            {
+                if (curNodeObj.queue.cap > 0)
+                    curNodeObj.queue.push(n.id);
+                continue;
+            }
+
+            // If NPC is at the front of the queue or light is green, remove from queue
+            if (!curNodeObj.queue.empty() && curNodeObj.queue.front() == n.id)
+                curNodeObj.queue.pop();
+        }
+
+        // Move along the edge
         Vec2f a = G.nodes[n.currentNode].pos;
         Vec2f b = G.nodes[n.nextNode].pos;
         float segLen = distf(a, b);
         if (segLen < 1e-4f)
         {
-            // instantly arrive and pick a neighbor
             n.currentNode = n.nextNode;
             n.posAlong = 0.0f;
             DynArr<Edge> &nb = G.adj[n.currentNode];
             if (nb.size() > 0)
-            {
-                int idx = GetRandomValue(0, nb.size() - 1);
-                n.nextNode = nb[idx].to;
-            }
+                n.nextNode = nb[GetRandomValue(0, nb.size() - 1)].to;
             else
-            {
                 n.nextNode = n.currentNode;
-            }
             continue;
         }
 
         float delta = (n.speed * dt) / segLen;
         n.posAlong += delta;
+
         if (n.posAlong >= 1.0f)
         {
             n.currentNode = n.nextNode;
             n.posAlong = 0.0f;
             DynArr<Edge> &nb = G.adj[n.currentNode];
             if (nb.size() > 0)
-            {
-                int idx = GetRandomValue(0, nb.size() - 1);
-                n.nextNode = nb[idx].to;
-            }
+                n.nextNode = nb[GetRandomValue(0, nb.size() - 1)].to;
             else
-            {
                 n.nextNode = n.currentNode;
-            }
         }
     }
 }
