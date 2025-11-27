@@ -1167,6 +1167,19 @@ void drawUI()
     DrawCircle(screenW - 105, screenH - 20, 6, ORANGE);
     DrawText("NPC Vehicle:", screenW - 260, screenH - 10, 14, RAYWHITE);
     DrawCircle(screenW - 105, screenH - 5, 6, GREEN);
+
+    if (selectedStart != -1)
+    {
+        Vec2f p = G.nodes[selectedStart].pos;
+        DrawCircleLines((int)p.x, (int)p.y, 14, GREEN);
+        DrawText("Start", (int)p.x - 18, (int)p.y - 28, 10, GREEN);
+    }
+    if (selectedEnd != -1)
+    {
+        Vec2f p = G.nodes[selectedEnd].pos;
+        DrawCircleLines((int)p.x, (int)p.y, 14, RED);
+        DrawText("End", (int)p.x - 12, (int)p.y - 28, 10, RED);
+    }
 }
 
 // -----------------------------
