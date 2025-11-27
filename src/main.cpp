@@ -21,6 +21,11 @@ static float distf(const Vec2f &a, const Vec2f &b)
     return sqrtf(dx * dx + dy * dy);
 }
 
+static Vec2f lerp(const Vec2f &a, const Vec2f &b, float t)
+{
+    return Vec2f(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
+}
+
 // -----------------------------
 // DynArr: minimal dynamic array (with deep copy)
 // -----------------------------
@@ -69,6 +74,7 @@ struct DynArr
     ~DynArr() { delete[] data; }
 
     void clear() { count = 0; }
+    bool empty() const { return count == 0; }
     int size() const { return count; }
 
     void reserve(int newcap)
@@ -91,6 +97,12 @@ struct DynArr
         if (count + 1 > capacity)
             reserve(count + 1);
         data[count++] = v;
+    }
+
+    void popBack()
+    {
+        if (count > 0)
+            --count;
     }
 
     T &operator[](int i) { return data[i]; }
@@ -130,7 +142,7 @@ struct SimpleQueueInt
             while (idx != tail)
             {
                 nb[sz++] = buf[idx];
-                idx = (idx + 1) % cap; // ✅ FIXED: step by 1, not +cap
+                idx = (idx + 1) % cap;
             }
         }
 
@@ -329,6 +341,16 @@ struct Vehicle
           finished(false), waiting(false), waitingNode(-1) {}
 };
 
+struct NPCVehicle
+{
+    int id;
+    int currentNode;
+    int nextNode;
+    float posAlong;
+    float speed;
+    NPCVehicle() : id(-1), currentNode(0), nextNode(0), posAlong(0.0f), speed(40.0f) {}
+};
+
 // -----------------------------
 // Globals
 // -----------------------------
@@ -344,6 +366,10 @@ static DynArr<int> lastPath;
 static bool useAstar = false;
 static float lightCycle = 6.0f;
 static int screenW = 1280, screenH = 720;
+
+// NPC globals
+static DynArr<NPCVehicle> npcVehicles;
+static int nextNPCId = 100000; // keep NPC ids separate
 
 // -----------------------------
 // Build simple grid graph
@@ -458,6 +484,7 @@ bool runDijkstra(int s, int t)
     ensureArrSize(n);
     MinHeap heap;
     heap.reserve(n + 4);
+    // reset g_scores and cameFrom were handled by ensureArrSize
     g_scores[s] = 0.0f;
     heap.push(s, 0.0f);
     while (!heap.empty())
@@ -536,7 +563,7 @@ Vehicle *spawnVehicle(int src, int dest, VehicleType type)
 {
     if (src < 0 || dest < 0)
         return nullptr;
-    // compute path first (Dijkstra)
+    // require pathFound to be true (lastPath prepared)
     if (!pathFound)
         return nullptr;
 
@@ -569,6 +596,40 @@ void resetVehicles()
     vehicles.clear();
     emergencyHeap.clear();
     nextVehicleId = 1;
+}
+
+// -----------------------------
+// NPC control
+// -----------------------------
+void spawnNPCs(int count = 1)
+{
+    if (G.size() == 0)
+        return;
+    for (int k = 0; k < count; ++k)
+    {
+        NPCVehicle n;
+        n.id = nextNPCId++;
+        n.currentNode = GetRandomValue(0, G.size() - 1);
+        if (G.adj[n.currentNode].size() > 0)
+        {
+            int idx = GetRandomValue(0, G.adj[n.currentNode].size() - 1);
+            n.nextNode = G.adj[n.currentNode][idx].to;
+        }
+        else
+            n.nextNode = n.currentNode;
+        n.posAlong = 0.0f;
+        n.speed = (float)GetRandomValue(30, 60); // px/sec, slower than user cars
+        npcVehicles.push(n);
+    }
+}
+
+void removeNPCs(int count = 1)
+{
+    for (int i = 0; i < count; ++i)
+    {
+        if (!npcVehicles.empty())
+            npcVehicles.popBack();
+    }
 }
 
 // -----------------------------
@@ -664,44 +725,38 @@ void updateVehicles(float dt)
                 // clear queue at this node
                 while (!n.queue.empty())
                     n.queue.pop();
+
+                // ensure green for emergency direction
+                n.lightState = 0;
             }
             else
             {
                 // NORMAL logic
                 if (!green)
                 {
-                    n.queue.push(v.id);
-                    v.waiting = true;
-                    v.waitingNode = curNode;
-                    continue;
-                }
-
-                if (!n.queue.empty())
-                {
-                    int front = n.queue.front();
-                    if (front != v.id)
-                        continue;
-                    n.queue.pop();
-                    v.waiting = false;
-                }
-            }
-
-            {
-                bool allowed = true;
-                if (!n.queue.empty())
-                {
-                    int front = n.queue.front();
-                    if (front != v.id)
-                        allowed = false;
-                    else
+                    // push only once
+                    if (!v.waiting)
                     {
-                        n.queue.pop();
-                        v.waiting = false;
-                        v.waitingNode = -1;
+                        n.queue.push(v.id);
+                        v.waiting = true;
+                        v.waitingNode = curNode;
                     }
-                }
-                if (!allowed)
                     continue;
+                }
+
+                // GREEN LIGHT: if queue exists, only proceed if front == v.id
+                if (!n.queue.empty())
+                {
+                    int front = n.queue.front();
+                    if (front != v.id)
+                        continue; // not your turn yet
+                    // it's your turn: pop exactly once
+                    n.queue.pop();
+                }
+
+                // mark as not waiting
+                v.waiting = false;
+                v.waitingNode = -1;
             }
         }
 
@@ -735,6 +790,61 @@ void updateVehicles(float dt)
 }
 
 // -----------------------------
+// NPC update (independent system)
+// -----------------------------
+void updateNPCs(float dt)
+{
+    for (int i = 0; i < npcVehicles.size(); ++i)
+    {
+        NPCVehicle &n = npcVehicles[i];
+
+        if (n.currentNode < 0 || n.currentNode >= G.size())
+            continue;
+        if (n.nextNode < 0 || n.nextNode >= G.size())
+            continue;
+
+        Vec2f a = G.nodes[n.currentNode].pos;
+        Vec2f b = G.nodes[n.nextNode].pos;
+        float segLen = distf(a, b);
+        if (segLen < 1e-4f)
+        {
+            // instantly arrive and pick a neighbor
+            n.currentNode = n.nextNode;
+            n.posAlong = 0.0f;
+            DynArr<Edge> &nb = G.adj[n.currentNode];
+            if (nb.size() > 0)
+            {
+                int idx = GetRandomValue(0, nb.size() - 1);
+                n.nextNode = nb[idx].to;
+            }
+            else
+            {
+                n.nextNode = n.currentNode;
+            }
+            continue;
+        }
+
+        float delta = (n.speed * dt) / segLen;
+        n.posAlong += delta;
+        if (n.posAlong >= 1.0f)
+        {
+            n.currentNode = n.nextNode;
+            n.posAlong = 0.0f;
+            DynArr<Edge> &nb = G.adj[n.currentNode];
+            if (nb.size() > 0)
+            {
+                int idx = GetRandomValue(0, nb.size() - 1);
+                n.nextNode = nb[idx].to;
+            }
+            else
+            {
+                n.nextNode = n.currentNode;
+            }
+        }
+    }
+}
+
+// -----------------------------
 // Drawing helpers
 // -----------------------------
 void drawNode(int i)
@@ -747,7 +857,7 @@ void drawNode(int i)
         col = (Color){230, 230, 200, 255};
     DrawCircle((int)n.pos.x, (int)n.pos.y, 8, col);
     DrawCircleLines((int)n.pos.x, (int)n.pos.y, 8, DARKGRAY);
-    Color lcol = (n.lightState == 0) ? GREEN : RED;
+    Color lcol = (n.lightState == 0) ? DARKGREEN : RED;
     DrawRectangle((int)n.pos.x + 10, (int)n.pos.y - 6, 8, 12, lcol);
     if (showIds)
     {
@@ -809,6 +919,24 @@ void drawVehicles()
     }
 }
 
+void drawNPCs()
+{
+    for (int i = 0; i < npcVehicles.size(); ++i)
+    {
+        NPCVehicle &n = npcVehicles[i];
+        if (n.currentNode < 0 || n.currentNode >= G.size())
+            continue;
+        if (n.nextNode < 0 || n.nextNode >= G.size())
+            continue;
+
+        Vec2f a = G.nodes[n.currentNode].pos;
+        Vec2f b = G.nodes[n.nextNode].pos;
+        Vec2f p = lerp(a, b, n.posAlong);
+        DrawCircle((int)p.x, (int)p.y, 5, GREEN);
+        DrawCircleLines((int)p.x, (int)p.y, 6, BLACK);
+    }
+}
+
 void drawUI()
 {
     DrawRectangle(0, screenH - 120, screenW, 120, (Color){20, 20, 20, 200});
@@ -831,9 +959,11 @@ void drawUI()
     DrawText("    G = ", 12 + 330, screenH - 45, 18, YELLOW);
     DrawText("toggle node ids", 12 + 385, screenH - 45, 18, RAYWHITE);
 
+    DrawText("UP/DOWN = spawn/remove NPCs", 12 + 520, screenH - 64, 18, RAYWHITE);
+
     char buf[256];
-    sprintf(buf, "Start: %d   End: %d   Path found: %s   Algorithm: %s   Vehicles: %d",
-            selectedStart, selectedEnd, pathFound ? "YES" : "NO", useAstar ? "A*" : "Dijkstra", vehicles.size());
+    sprintf(buf, "Start: %d   End: %d   Path found: %s   Algorithm: %s   Vehicles: %d   NPCs: %d",
+            selectedStart, selectedEnd, pathFound ? "YES" : "NO", useAstar ? "A*" : "Dijkstra", vehicles.size(), npcVehicles.size());
     DrawText(buf, 12, screenH - 25, 18, RAYWHITE);
 
     DrawText("Legend:", screenW - 350, screenH - 110, 20, RAYWHITE);
@@ -848,6 +978,8 @@ void drawUI()
     DrawCircle(screenW - 105, screenH - 40, 6, DARKBLUE);
     DrawText("Emergency Vehicle:", screenW - 260, screenH - 25, 14, RAYWHITE);
     DrawCircle(screenW - 105, screenH - 20, 6, ORANGE);
+    DrawText("NPC Vehicle:", screenW - 260, screenH - 10, 14, RAYWHITE);
+    DrawCircle(screenW - 105, screenH - 5, 6, GREEN);
 }
 
 // -----------------------------
@@ -873,6 +1005,10 @@ int main()
     ensureArrSize(G.size());
 
     vehicles.clear();
+    npcVehicles.clear();
+
+    // spawn a few NPCs by default
+    spawnNPCs(6);
 
     double prev = GetTime();
     while (!WindowShouldClose())
@@ -947,10 +1083,17 @@ int main()
         if (IsKeyPressed(KEY_G))
             showIds = !showIds;
 
+        // NPC spawn/remove
+        if (IsKeyPressed(KEY_UP))
+            spawnNPCs(1);
+        if (IsKeyPressed(KEY_DOWN))
+            removeNPCs(1);
+
         if (runningSim)
         {
             updateTrafficLights(dt);
             updateVehicles(dt);
+            updateNPCs(dt);
         }
 
         BeginDrawing();
@@ -966,6 +1109,10 @@ int main()
             drawPath(lastPath);
         for (int i = 0; i < G.size(); ++i)
             drawNode(i);
+
+        // Draw NPCs under user vehicles (background traffic)
+        drawNPCs();
+
         drawVehicles();
 
         if (selectedStart != -1)
@@ -985,5 +1132,6 @@ int main()
         EndDrawing();
     }
 
+    CloseWindow();
     return 0;
 }
