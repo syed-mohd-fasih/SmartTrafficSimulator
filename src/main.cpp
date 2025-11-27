@@ -1126,47 +1126,46 @@ void drawNPCs()
 void drawUI()
 {
     // ... (UI drawing logic using DrawText and DrawRectangle)
-    DrawRectangle(0, screenH - 120, screenW, 120, (Color){20, 20, 20, 200});
-    DrawText("SmartTraffic - Keyboard Shortcuts:", 12, screenH - 110, 26, RAYWHITE);
-    DrawText("Left-click nodes to set Start then End", 12, screenH - 83, 18, RAYWHITE);
+    DrawRectangle(0, screenH - 140, screenW, 140, (Color){20, 20, 20, 200});
+    DrawText("SmartTraffic - Keyboard Shortcuts:", 12, screenH - 135, 26, SKYBLUE);
+    DrawText("Left-click nodes to set Start then End", 12, screenH - 100, 18, GOLD);
 
-    DrawText("D = ", 12, screenH - 64, 18, BLUE);
-    DrawText("Dijkstra", 45, screenH - 64, 18, RAYWHITE);
-    DrawText("    A = ", 12 + 100, screenH - 64, 18, GREEN);
-    DrawText("A*", 12 + 155, screenH - 64, 18, RAYWHITE);
-    DrawText("    V = ", 12 + 180, screenH - 64, 18, BLUE);
-    DrawText("spawn vehicle", 12 + 245, screenH - 64, 18, RAYWHITE);
-    DrawText("    E = ", 12 + 370, screenH - 64, 18, ORANGE);
-    DrawText("spawn emergency", 12 + 435, screenH - 64, 18, RAYWHITE);
+    DrawText("D = ", 12, screenH - 74, 18, PINK);
+    DrawText("Dijkstra", 45, screenH - 74, 18, RAYWHITE);
+    DrawText("    A = ", 12 + 100, screenH - 74, 18, PURPLE);
+    DrawText("A*", 12 + 155, screenH - 74, 18, RAYWHITE);
+    DrawText("    V = ", 12 + 185, screenH - 74, 18, BLUE);
+    DrawText("spawn vehicle", 12 + 245, screenH - 74, 18, RAYWHITE);
+    DrawText("    E = ", 12 + 360, screenH - 74, 18, ORANGE);
+    DrawText("spawn emergency", 12 + 410, screenH - 74, 18, RAYWHITE);
+    DrawText("UP/DOWN = spawn/remove NPCs", 12 + 580, screenH - 74, 18, LIGHTGRAY);
 
-    DrawText("S = ", 12, screenH - 45, 18, GREEN);
-    DrawText("Start/Stop sim", 45, screenH - 45, 18, RAYWHITE);
-    DrawText("    R = ", 12 + 150, screenH - 45, 18, RED);
-    DrawText("Reset vehicles", 12 + 205, screenH - 45, 18, RAYWHITE);
-    DrawText("    G = ", 12 + 330, screenH - 45, 18, YELLOW);
-    DrawText("toggle node ids", 12 + 385, screenH - 45, 18, RAYWHITE);
-
-    DrawText("UP/DOWN = spawn/remove NPCs", 12 + 520, screenH - 64, 18, RAYWHITE);
+    DrawText("S = ", 12, screenH - 55, 18, GREEN);
+    DrawText("Start/Stop sim", 45, screenH - 55, 18, RAYWHITE);
+    DrawText("    R = ", 12 + 165, screenH - 55, 18, RED);
+    DrawText("Reset vehicles", 12 + 220, screenH - 55, 18, RAYWHITE);
+    DrawText("    G = ", 12 + 345, screenH - 55, 18, YELLOW);
+    DrawText("toggle node ids", 12 + 400, screenH - 55, 18, RAYWHITE);
 
     char buf[256];
     sprintf(buf, "Start: %d   End: %d   Path found: %s   Algorithm: %s   Vehicles: %d   NPCs: %d",
             selectedStart, selectedEnd, pathFound ? "YES" : "NO", useAstar ? "A*" : "Dijkstra", vehicles.size(), npcVehicles.size());
-    DrawText(buf, 12, screenH - 25, 18, RAYWHITE);
+    DrawText(buf, 12, screenH - 25, 18, BEIGE);
 
-    DrawText("Legend:", screenW - 350, screenH - 110, 20, RAYWHITE);
-    DrawRectangle(screenW - 270, screenH - 110, 260, 100, (Color){40, 40, 40, 180});
-    DrawText("Node:", screenW - 260, screenH - 105, 14, RAYWHITE);
-    DrawCircle(screenW - 105, screenH - 97, 6, LIGHTGRAY);
-    DrawText("Edge:", screenW - 260, screenH - 85, 14, RAYWHITE);
-    DrawLine(screenW - 120, screenH - 77, screenW - 90, screenH - 77, LIGHTGRAY);
-    DrawText("Path:", screenW - 260, screenH - 65, 14, RAYWHITE);
-    DrawRectangle(screenW - 120, screenH - 60, 30, 6, (Color){100, 180, 255, 180});
-    DrawText("Normal Vehicle:", screenW - 260, screenH - 45, 14, RAYWHITE);
-    DrawCircle(screenW - 105, screenH - 40, 6, DARKBLUE);
-    DrawText("Emergency Vehicle:", screenW - 260, screenH - 25, 14, RAYWHITE);
-    DrawCircle(screenW - 105, screenH - 20, 6, ORANGE);
-    DrawText("NPC Vehicle:", screenW - 260, screenH - 10, 14, RAYWHITE);
-    DrawCircle(screenW - 105, screenH - 5, 6, GREEN);
+    DrawText("Legend:", screenW - 350, screenH - 130, 26, SKYBLUE);
+    DrawRectangle(screenW - 270, screenH - 130, 260, 120, (Color){40, 40, 40, 180});
+    DrawText("Node:", screenW - 260, screenH - 125, 14, LIGHTGRAY);
+    DrawCircle(screenW - 105, screenH - 117, 6, LIGHTGRAY);
+    DrawText("Edge:", screenW - 260, screenH - 105, 14, LIGHTGRAY);
+    DrawLine(screenW - 120, screenH - 97, screenW - 90, screenH - 97, LIGHTGRAY);
+    DrawText("Path:", screenW - 260, screenH - 85, 14, LIGHTGRAY);
+    DrawRectangle(screenW - 120, screenH - 80, 30, 6, (Color){100, 180, 255, 180});
+    DrawText("Normal Vehicle:", screenW - 260, screenH - 65, 14, LIGHTGRAY);
+    DrawCircle(screenW - 105, screenH - 60, 6, DARKBLUE);
+    DrawText("Emergency Vehicle:", screenW - 260, screenH - 45, 14, LIGHTGRAY);
+    DrawCircle(screenW - 105, screenH - 40, 6, ORANGE);
+    DrawText("NPC Vehicle:", screenW - 260, screenH - 25, 14, LIGHTGRAY);
+    DrawCircle(screenW - 105, screenH - 20, 6, GREEN);
 
     if (selectedStart != -1)
     {
