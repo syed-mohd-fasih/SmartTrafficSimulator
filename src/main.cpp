@@ -480,6 +480,37 @@ bool reconstructPath(int s, int t, DynArr<int> &out)
     return true;
 }
 
+// Edge weight calculation factoring in queue delays at the target node.
+float getDynamicEdgeWeight(int fromNode, int toNode, float staticDistance)
+{
+    // The node 'toNode' is the intersection where the car must potentially stop.
+    Node &targetNode = G.nodes[toNode];
+
+    // We only care about the queue size if the light is currently RED (1).
+    // If the light is GREEN (0), the delay is minimal, so we use a very low/zero penalty.
+
+    float baseTime = staticDistance / 80.0f; // Time = Distance / Avg Speed (User car speed is 80.0f)
+    float penaltyFactor = 1.0f;              // 1 second penalty per car in queue
+
+    float trafficDelay = 0.0f;
+
+    // Check if the intersection is currently showing a RED light
+    if (targetNode.lightState == 1)
+    {
+        // Add a penalty proportional to the current queue length
+        // We estimate the queue size by checking how far the tail is from the head.
+        // For a SimpleQueueInt, the size is calculated by the distance between head and tail, accounting for circular wrap.
+        int queueSize = (targetNode.queue.tail - targetNode.queue.head + targetNode.queue.cap) % targetNode.queue.cap;
+
+        // Apply the penalty
+        trafficDelay = queueSize * penaltyFactor;
+    }
+
+    // The final weight is an estimated time (base travel time + delay).
+    // Dijkstra/A* will seek the minimum total time.
+    return baseTime + trafficDelay;
+}
+
 bool runDijkstra(int s, int t)
 {
     int n = G.size();
@@ -505,12 +536,19 @@ bool runDijkstra(int s, int t)
         for (int ei = 0; ei < G.adj[u].size(); ++ei)
         {
             Edge &e = G.adj[u][ei];
-            float nd = d + e.w;
-            if (nd < g_scores[e.to])
+            int v = e.to; // Next node
+
+            // --- MODIFIED LINE: Calculate dynamic weight (estimated travel time) ---
+            float currentDistance = distf(G.nodes[u].pos, G.nodes[v].pos);
+            float edgeCost = getDynamicEdgeWeight(u, v, currentDistance);
+
+            float nd = d + edgeCost; // New accumulated distance (time)
+
+            if (nd < g_scores[v])
             {
-                g_scores[e.to] = nd;
-                cameFrom[e.to] = u;
-                heap.push(e.to, nd);
+                g_scores[v] = nd;
+                cameFrom[v] = u;
+                heap.push(v, nd);
             }
         }
     }
@@ -544,13 +582,23 @@ bool runAstar(int s, int t)
         for (int ei = 0; ei < G.adj[u].size(); ++ei)
         {
             Edge &e = G.adj[u][ei];
-            float tentative = g_scores[u] + e.w;
-            if (tentative < g_scores[e.to])
+            int v = e.to; // Next node
+
+            // --- MODIFIED LINES: Calculate dynamic weight (estimated travel time) ---
+            float currentDistance = distf(G.nodes[u].pos, G.nodes[v].pos);
+            float edgeCost = getDynamicEdgeWeight(u, v, currentDistance);
+
+            float tentative = g_scores[u] + edgeCost;
+
+            if (tentative < g_scores[v])
             {
-                cameFrom[e.to] = u;
-                g_scores[e.to] = tentative;
-                float est = tentative + distf(G.nodes[e.to].pos, G.nodes[t].pos);
-                heap.push(e.to, est);
+                cameFrom[v] = u;
+                g_scores[v] = tentative;
+
+                // Calculate F-score: g(u) [dynamic time] + h(u) [static distance heuristic]
+                // We use static distance for the heuristic to maintain A* admissibility.
+                float est = tentative + distf(G.nodes[v].pos, G.nodes[t].pos);
+                heap.push(v, est);
             }
         }
     }
