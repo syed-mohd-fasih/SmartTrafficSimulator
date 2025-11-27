@@ -1152,7 +1152,7 @@ void drawUI()
             selectedStart, selectedEnd, pathFound ? "YES" : "NO", useAstar ? "A*" : "Dijkstra", vehicles.size(), npcVehicles.size());
     DrawText(buf, 12, screenH - 25, 18, BEIGE);
 
-    DrawText("Legend:", screenW - 350, screenH - 130, 26, SKYBLUE);
+    DrawText("Legend:", screenW - 370, screenH - 130, 26, SKYBLUE);
     DrawRectangle(screenW - 270, screenH - 130, 260, 120, (Color){40, 40, 40, 180});
     DrawText("Node:", screenW - 260, screenH - 125, 14, LIGHTGRAY);
     DrawCircle(screenW - 105, screenH - 117, 6, LIGHTGRAY);
